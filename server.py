@@ -65,15 +65,40 @@ def fetch_latest_candles(count=200):
     """Fetch recent 5-min OHLCV candles from free APIs."""
     candles = []
 
-    # Try TwelveData (free tier: 800 req/day)
+    # Yahoo Finance (free, no API key needed)
+    try:
+        range_param = "2d" if count <= 200 else "5d"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=5m&range={range_param}"
+        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200:
+            data = r.json()
+            result = data["chart"]["result"][0]
+            timestamps = result["timestamp"]
+            ohlcv = result["indicators"]["quote"][0]
+            for idx, ts in enumerate(timestamps):
+                o = ohlcv["open"][idx]
+                h = ohlcv["high"][idx]
+                lo = ohlcv["low"][idx]
+                c = ohlcv["close"][idx]
+                v = ohlcv.get("volume", [1])[idx] or 1
+                if o and h and lo and c:
+                    candles.append({
+                        "time": datetime.utcfromtimestamp(ts),
+                        "open": float(o),
+                        "high": float(h),
+                        "low": float(lo),
+                        "close": float(c),
+                        "volume": float(v),
+                    })
+            logger.info(f"Fetched {len(candles)} candles from Yahoo Finance")
+            return candles
+    except Exception as e:
+        logger.warning(f"Yahoo Finance failed: {e}")
+
+    # Fallback: TwelveData
     try:
         url = "https://api.twelvedata.com/time_series"
-        params = {
-            "symbol": "XAU/USD",
-            "interval": "5min",
-            "outputsize": count,
-            "apikey": "demo",
-        }
+        params = {"symbol": "XAU/USD", "interval": "5min", "outputsize": count, "apikey": "demo"}
         r = requests.get(url, params=params, timeout=10)
         if r.status_code == 200:
             data = r.json()
@@ -92,42 +117,22 @@ def fetch_latest_candles(count=200):
     except Exception as e:
         logger.warning(f"TwelveData failed: {e}")
 
-    # Fallback: Alpha Vantage (free tier)
-    try:
-        url = "https://www.alphavantage.co/query"
-        params = {
-            "function": "FX_INTRADAY",
-            "from_symbol": "XAU",
-            "to_symbol": "USD",
-            "interval": "5min",
-            "outputsize": "compact",
-            "apikey": "demo",
-        }
-        r = requests.get(url, params=params, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            ts_key = [k for k in data if "Time Series" in k]
-            if ts_key:
-                for t, v in data[ts_key[0]].items():
-                    candles.append({
-                        "time": datetime.strptime(t, "%Y-%m-%d %H:%M:%S"),
-                        "open": float(v["1. open"]),
-                        "high": float(v["2. high"]),
-                        "low": float(v["3. low"]),
-                        "close": float(v["4. close"]),
-                        "volume": 1,
-                    })
-                candles.reverse()
-                logger.info(f"Fetched {len(candles)} candles from Alpha Vantage")
-                return candles
-    except Exception as e:
-        logger.warning(f"Alpha Vantage failed: {e}")
-
     return candles
 
 
 def fetch_live_price():
     """Get just the latest price."""
+    # Yahoo Finance
+    try:
+        r = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d",
+                         timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200:
+            data = r.json()
+            price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
+            return float(price)
+    except Exception:
+        pass
+    # Fallback
     try:
         r = requests.get("https://api.twelvedata.com/price", params={"symbol": "XAU/USD", "apikey": "demo"}, timeout=5)
         if r.status_code == 200:
