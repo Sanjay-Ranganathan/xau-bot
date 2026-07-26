@@ -11,11 +11,10 @@ COPY core/ core/
 COPY feeds/ feeds/
 COPY dashboard/ dashboard/
 COPY alerts/ alerts/
-COPY main.py .
-COPY config.json .
+COPY main.py server.py config.json ./
 
 RUN mkdir -p /app/logs /app/data
 
 EXPOSE 8080
 
-CMD ["python3", "main.py", "paper", "--feed", "websocket", "--log-level", "INFO"]
+CMD ["python3", "server.py"]
