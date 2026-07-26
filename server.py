@@ -61,6 +61,21 @@ def _save_state():
 
 
 # === PRICE FETCHING (via free APIs, no WebSocket needed) ===
+import subprocess
+
+def _curl_json(url):
+    """Fetch JSON via curl (works when requests doesn't)."""
+    try:
+        r = subprocess.run(
+            ["curl", "-s", "--max-time", "10", url, "-H", "User-Agent: Mozilla/5.0"],
+            capture_output=True, text=True, timeout=15
+        )
+        if r.returncode == 0 and r.stdout:
+            return json.loads(r.stdout)
+    except Exception:
+        pass
+    return None
+
 def fetch_latest_candles(count=200):
     """Fetch recent 5-min OHLCV candles from free APIs."""
     candles = []
@@ -69,9 +84,8 @@ def fetch_latest_candles(count=200):
     try:
         range_param = "2d" if count <= 200 else "5d"
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=5m&range={range_param}"
-        r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code == 200:
-            data = r.json()
+        data = _curl_json(url)
+        if data and "chart" in data and data["chart"]["result"]:
             result = data["chart"]["result"][0]
             timestamps = result["timestamp"]
             ohlcv = result["indicators"]["quote"][0]
@@ -122,21 +136,11 @@ def fetch_latest_candles(count=200):
 
 def fetch_live_price():
     """Get just the latest price."""
-    # Yahoo Finance
+    # Yahoo Finance via curl
     try:
-        r = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d",
-                         timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code == 200:
-            data = r.json()
-            price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
-            return float(price)
-    except Exception:
-        pass
-    # Fallback
-    try:
-        r = requests.get("https://api.twelvedata.com/price", params={"symbol": "XAU/USD", "apikey": "demo"}, timeout=5)
-        if r.status_code == 200:
-            return float(r.json().get("price", 0))
+        data = _curl_json("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1m&range=1d")
+        if data and data.get("chart", {}).get("result"):
+            return float(data["chart"]["result"][0]["meta"]["regularMarketPrice"])
     except Exception:
         pass
     return 0
@@ -403,7 +407,7 @@ def index():
         price = fetch_live_price()
 
         return render_template_string(DASHBOARD_HTML,
-            last_tick=_state.get("last_tick", "Never")[:19],
+            last_tick=(_state.get("last_tick") or "Never")[:19],
             price=f"{price:,.2f}" if price else "—",
             open_count=len(_state["open_pos"]),
             balance=f"{_state['balance']:,.2f}",
