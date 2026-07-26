@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+backtest_results.json
+logs/
+data/
+*.egg-info/
+.env
