@@ -7,7 +7,7 @@ import os
 import json
 import time
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import deque
 
 import MetaTrader5 as mt5
@@ -330,13 +330,13 @@ def close_position(ticket):
 # === SESSION CHECK ===
 def is_london_session():
     """Check if current UTC time is in London session."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return SESSION_START_UTC <= now.hour < SESSION_END_UTC
 
 
 def get_session_key():
     """Get session key for cooldown tracking."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return f"{now.strftime('%Y-%m-%d')}_london"
 
 
